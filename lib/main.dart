@@ -1,22 +1,46 @@
+// import 'package:flutter/material.dart';
+// import 'screens/home_page.dart';
+
+// void main() {
+//   runApp(const MyApp());
+// }
+
+// class MyApp extends StatelessWidget {
+//   const MyApp({super.key});
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return MaterialApp(
+//       debugShowCheckedModeBanner: false,
+//       theme: ThemeData(
+//         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
+//         useMaterial3: true,
+//       ),
+//       home: const HomePage(),
+//     );
+//   }
+// }
+
 import 'package:flutter/material.dart';
-import 'screens/home_page.dart';
+import 'navigation/main_navigation.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const ZiggyCarApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class ZiggyCarApp extends StatelessWidget {
+  const ZiggyCarApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
+      title: 'ZIGGY CAR',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
-        useMaterial3: true,
+        primarySwatch: Colors.blue,
+        fontFamily: 'SF Pro',
       ),
-      home: const HomePage(),
+      home: const MainNavigationPage(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
