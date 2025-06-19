@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../widgets/parameter_item.dart';
 
 class AutomatiquePage extends StatefulWidget {
   const AutomatiquePage({Key? key}) : super(key: key);
@@ -9,17 +8,49 @@ class AutomatiquePage extends StatefulWidget {
 }
 
 class _AutomatiquePageState extends State<AutomatiquePage> {
-  bool modeAutonome = true;
-  bool navigationPrecise = true;
-  bool obstacleDetection = true;
+  final TextEditingController _destinationController = TextEditingController();
   double statistiqueTrajet = 100;
-  String etatConnexion = 'Fort';
 
   List<Map<String, String>> locations = [
     {'name': 'Salle 101', 'status': 'OK'},
     {'name': 'Salle 102', 'status': 'OK'},
     {'name': 'Salle 103', 'status': 'OK'},
   ];
+
+  void _handleGoButtonPressed() {
+    String destination = _destinationController.text.trim();
+    if (destination.isNotEmpty) {
+      // Ici vous pouvez envoyer les données
+      print('Destination sélectionnée: $destination');
+      // Exemple d'envoi de données - remplacez par votre logique
+      _sendDestinationData(destination);
+    } else {
+      // Afficher un message d'erreur si le champ est vide
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veuillez entrer une destination'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _sendDestinationData(String destination) {
+    // Implémentez ici votre logique d'envoi de données
+    // Par exemple: appel API, navigation, etc.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Destination envoyée: $destination'),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _destinationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,14 +96,9 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
               ),
               const SizedBox(height: 20),
               
-              // Location list
-              ...locations.map((location) => _buildLocationItem(location)),
-              
-              const SizedBox(height: 20),
-              
-              // Parameters
+              // Destination Input Section
               const Text(
-                'Paramètres',
+                'Entrer votre destination',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -80,21 +106,66 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
               ),
               const SizedBox(height: 12),
               
-              ParameterItem(
-                title: 'Mode autonome',
-                value: modeAutonome,
-                onChanged: (value) => setState(() => modeAutonome = value),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _destinationController,
+                      decoration: InputDecoration(
+                        hintText: 'Saisir la destination...',
+                        hintStyle: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[500],
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: Colors.grey[300]!),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: const BorderSide(color: Colors.green),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _handleGoButtonPressed,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green[50],
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.green),
+                      ),
+                      child: const Text(
+                        'GO',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.green,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              ParameterItem(
-                title: 'Navigation précise',
-                value: navigationPrecise,
-                onChanged: (value) => setState(() => navigationPrecise = value),
-              ),
-              ParameterItem(
-                title: 'Obstacledetection',
-                value: obstacleDetection,
-                onChanged: (value) => setState(() => obstacleDetection = value),
-              ),
+              
+              const SizedBox(height: 20),
+              
+              // Location list
+              ...locations.map((location) => _buildLocationItem(location)),
               
               const SizedBox(height: 20),
               
@@ -126,26 +197,6 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
                   const SizedBox(width: 8),
                   const Text('Distribution',
                       style: TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
-              ),
-              
-              const SizedBox(height: 20),
-              
-              // Connection Status
-              const Text(
-                'État de la connexion',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 12),
-              
-              Row(
-                children: [
-                  _buildConnectionStatus('Faible', etatConnexion == 'Faible'),
-                  _buildConnectionStatus('Fort', etatConnexion == 'Fort'),
-                  _buildConnectionStatus('Moyenne', etatConnexion == 'Moyenne'),
                 ],
               ),
             ],
@@ -183,34 +234,6 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildConnectionStatus(String label, bool isSelected) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => etatConnexion = label),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.green[50] : Colors.grey[100],
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: isSelected ? Colors.green : Colors.grey[300]!,
-            ),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              color: isSelected ? Colors.green : Colors.grey[600],
-              fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
-            ),
-          ),
-        ),
       ),
     );
   }
