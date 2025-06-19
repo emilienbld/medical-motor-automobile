@@ -9,8 +9,8 @@ class JoystickPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      bluetoothState: BluetoothAdapterState.on, // Juste pour l’icône
-      onBluetoothToggle: () {}, // Option vide ici
+      bluetoothState: BluetoothAdapterState.on, 
+      onBluetoothToggle: () {}, 
       title: "Contrôle manuel",
       body: Center(
         child: Joystick(

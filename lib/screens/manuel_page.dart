@@ -1,223 +1,10 @@
-// import 'package:flutter/material.dart';
-// import '../widgets/joystick_widget.dart';
-// import 'package:http/http.dart' as http;
-// import '../services/wifi_connection_manager.dart'; // AJOUTÉ
-// import 'dart:async'; // AJOUTÉ
-// class ManuelPage extends StatefulWidget {
-//   const ManuelPage({Key? key}) : super(key: key);
-
-//   @override
-//   State<ManuelPage> createState() => _ManuelPageState();
-// }
-
-// class _ManuelPageState extends State<ManuelPage> {
-//   bool modeAutonome = false;
-//   double statistiqueTrajet = 100;
-//   String etatConnexion = 'CONNECTÉ';
-//   String signalForce = 'Fort';
-
-//   Future<void> sendCommand(String direction) async {
-//     try {
-//       final response = await http.get(
-//         Uri.parse("http://192.168.4.1/move?dir=$direction"),
-//       );
-//       print("Commande envoyée: $direction | Réponse: ${response.statusCode}");
-//     } catch (e) {
-//       print("Erreur lors de l'envoi de la commande: $e");
-//     }
-//   }
-
-//   void _onJoystickMove(double x, double y) {
-//     print('Joystick position: x=$x, y=$y');
-
-//     const seuil = 0.5;
-
-//     if (y < -seuil) {
-//       sendCommand("forward");
-//     } else if (y > seuil) {
-//       sendCommand("backward");
-//     } else if (x > seuil) {
-//       sendCommand("right");
-//     } else if (x < -seuil) {
-//       sendCommand("left");
-//     } else {
-//       sendCommand("stop");
-//     }
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Container(
-//       margin: const EdgeInsets.all(16),
-//       decoration: BoxDecoration(
-//         color: Colors.white,
-//         borderRadius: BorderRadius.circular(12),
-//       ),
-//       child: Padding(
-//         padding: const EdgeInsets.all(16),
-//         child: SingleChildScrollView(
-//           child: Column(
-//             children: [
-//               // Header
-//               const Text(
-//                 'Navigation autonome',
-//                 style: TextStyle(
-//                   fontSize: 16,
-//                   fontWeight: FontWeight.w500,
-//                 ),
-//               ),
-//               const SizedBox(height: 8),
-//               const Text(
-//                 'Contrôle manuel',
-//                 style: TextStyle(
-//                   fontSize: 14,
-//                   color: Colors.grey,
-//                 ),
-//               ),
-//               const Text(
-//                 'Utilisez le joystick pour déplacer le robot',
-//                 style: TextStyle(
-//                   fontSize: 12,
-//                   color: Colors.grey,
-//                 ),
-//               ),
-//               const Text(
-//                 '• Robot disponible',
-//                 style: TextStyle(
-//                   fontSize: 12,
-//                   color: Colors.green,
-//                 ),
-//               ),
-
-//               const SizedBox(height: 40),
-
-//               // Joystick
-//               JoystickWidget(
-//                 onJoystickMove: _onJoystickMove,
-//               ),
-
-//               const SizedBox(height: 40),
-
-//               // Mode autonomous toggle
-//               Row(
-//                 children: [
-//                   Container(
-//                     width: 8,
-//                     height: 8,
-//                     decoration: BoxDecoration(
-//                       color: modeAutonome ? Colors.green : Colors.grey,
-//                       shape: BoxShape.circle,
-//                     ),
-//                   ),
-//                   const SizedBox(width: 12),
-//                   const Expanded(
-//                     child: Text(
-//                       'Mode autonome',
-//                       style: TextStyle(fontSize: 14),
-//                     ),
-//                   ),
-//                   Switch(
-//                     value: modeAutonome,
-//                     onChanged: (value) {
-//                       setState(() => modeAutonome = value);
-//                       if (value) {
-//                         print('Mode autonome activé');
-//                       } else {
-//                         print('Mode manuel activé');
-//                       }
-//                     },
-//                     activeColor: Colors.green,
-//                   ),
-//                 ],
-//               ),
-
-//               const SizedBox(height: 20),
-
-//               // Statistics
-//               const Text(
-//                 'Statistique de trajet',
-//                 style: TextStyle(
-//                   fontSize: 14,
-//                   fontWeight: FontWeight.w600,
-//                 ),
-//               ),
-//               const SizedBox(height: 12),
-
-//               Row(
-//                 children: [
-//                   const Text('100m',
-//                       style: TextStyle(fontSize: 12, color: Colors.grey)),
-//                   const SizedBox(width: 8),
-//                   Expanded(
-//                     child: Slider(
-//                       value: statistiqueTrajet,
-//                       min: 0,
-//                       max: 200,
-//                       activeColor: Colors.green,
-//                       onChanged: (value) {
-//                         setState(() => statistiqueTrajet = value);
-//                       },
-//                     ),
-//                   ),
-//                   const SizedBox(width: 8),
-//                   const Text('Suivi des mouvements',
-//                       style: TextStyle(fontSize: 12, color: Colors.grey)),
-//                 ],
-//               ),
-
-//               const SizedBox(height: 20),
-
-//               // Connection Status
-//               const Text(
-//                 'État de la connexion',
-//                 style: TextStyle(
-//                   fontSize: 14,
-//                   fontWeight: FontWeight.w600,
-//                 ),
-//               ),
-//               const SizedBox(height: 12),
-
-//               Row(
-//                 children: [
-//                   Container(
-//                     width: 8,
-//                     height: 8,
-//                     decoration: const BoxDecoration(
-//                       color: Colors.green,
-//                       shape: BoxShape.circle,
-//                     ),
-//                   ),
-//                   const SizedBox(width: 8),
-//                   Text(
-//                     etatConnexion,
-//                     style: const TextStyle(
-//                       fontSize: 12,
-//                       color: Colors.green,
-//                       fontWeight: FontWeight.w500,
-//                     ),
-//                   ),
-//                   const Spacer(),
-//                   Text(
-//                     signalForce,
-//                     style: const TextStyle(
-//                       fontSize: 12,
-//                       color: Colors.grey,
-//                     ),
-//                   ),
-//                 ],
-//               ),
-//             ],
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
 import 'package:flutter/material.dart';
 import '../widgets/joystick_widget.dart';
 import 'package:http/http.dart' as http;
-import '../services/wifi_connection_manager.dart'; // AJOUTÉ
-import 'dart:async'; // AJOUTÉ
+import '../services/wifi_connection_manager.dart';
+import 'dart:async';
+import 'dart:math';
+import 'package:webview_flutter/webview_flutter.dart';
 
 class ManuelPage extends StatefulWidget {
   const ManuelPage({Key? key}) : super(key: key);
@@ -229,31 +16,50 @@ class ManuelPage extends StatefulWidget {
 class _ManuelPageState extends State<ManuelPage> {
   bool modeAutonome = false;
   double statistiqueTrajet = 100;
-  String etatConnexion = 'DÉCONNECTÉ'; // MODIFIÉ : valeur par défaut
-  String signalForce = 'N/A'; // MODIFIÉ : valeur par défaut
-  
-  // AJOUTÉ : Variables pour le WiFiConnectionManager
+  String etatConnexion = 'DÉCONNECTÉ';
+  String signalForce = 'N/A';
+
+  // Variables pour le WiFiConnectionManager
   final WiFiConnectionManager _connectionManager = WiFiConnectionManager();
   StreamSubscription<bool>? _connectionSubscription;
   bool isConnected = false;
   String? currentCommand;
   Timer? _commandTimer;
 
+  // NOUVELLES VARIABLES pour gérer le joystick
+  Timer? _stopTimer; // Timer pour forcer l'arrêt
+  String? _lastSentCommand; // Dernière commande envoyée
+  int _commandCount = 0; // Compteur pour éviter les spam
+  bool _isMoving = false; // État du mouvement
+
+  // Variables pour le démarrage progressif
+  double _currentSpeed = 0.0; // Vitesse actuelle (0-100)
+  Timer? _speedTimer; // Timer pour la progression de vitesse
+
+  // Variables pour la caméra
+  late final WebViewController _cameraController;
+  bool _cameraLoaded = false;
+  bool _showCamera = true;
+
   @override
-  void initState() { // NOUVELLE MÉTHODE
+  void initState() {
     super.initState();
-    
+
     // Récupérer l'état actuel de la connexion
     isConnected = _connectionManager.isConnected;
+
+    // Initialiser la caméra AVANT de mettre à jour le statut
+    _initializeCameraController();
     _updateConnectionStatus();
-    
+
     // Écouter les changements de connexion
-    _connectionSubscription = _connectionManager.connectionStream.listen((connected) {
+    _connectionSubscription =
+        _connectionManager.connectionStream.listen((connected) {
       setState(() {
         isConnected = connected;
         _updateConnectionStatus();
       });
-      
+
       if (!connected) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -271,18 +77,21 @@ class _ManuelPageState extends State<ManuelPage> {
   }
 
   @override
-  void dispose() { // NOUVELLE MÉTHODE
+  void dispose() {
     _connectionSubscription?.cancel();
     _commandTimer?.cancel();
+    _stopTimer?.cancel(); 
+    _speedTimer?.cancel(); 
     super.dispose();
   }
 
-  // NOUVELLE MÉTHODE : Mettre à jour l'affichage de l'état de connexion
+  // Mettre à jour l'affichage de l'état de connexion
   void _updateConnectionStatus() {
     setState(() {
       if (isConnected) {
         etatConnexion = 'CONNECTÉ';
         signalForce = 'Fort';
+        _loadCameraStream();
       } else {
         etatConnexion = 'DÉCONNECTÉ';
         signalForce = 'N/A';
@@ -290,7 +99,50 @@ class _ManuelPageState extends State<ManuelPage> {
     });
   }
 
-  // MODIFIÉE : Utiliser le WiFiConnectionManager au lieu de l'IP hardcodée
+  // Initialiser le contrôleur de caméra
+  void _initializeCameraController() {
+    _cameraController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(const Color(0x00000000))
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onProgress: (int progress) {
+            debugPrint('Caméra en cours de chargement: $progress%');
+          },
+          onPageStarted: (String url) {
+            debugPrint('Caméra: chargement démarré');
+            setState(() {
+              _cameraLoaded = false;
+            });
+          },
+          onPageFinished: (String url) {
+            debugPrint('Caméra: chargement terminé');
+            setState(() {
+              _cameraLoaded = true;
+            });
+          },
+          onWebResourceError: (WebResourceError error) {
+            debugPrint('Erreur caméra: ${error.description}');
+            setState(() {
+              _cameraLoaded = false;
+            });
+          },
+        ),
+      );
+
+    // Charger le stream de la caméra
+    if (isConnected) {
+      _loadCameraStream();
+    }
+  }
+
+  // Charger le stream de la caméra
+  void _loadCameraStream() {
+    String cameraUrl = "http://192.168.4.4";
+    _cameraController.loadRequest(Uri.parse(cameraUrl));
+  }
+
+  // Utiliser le WiFiConnectionManager au lieu de l'IP hardcodée
   Future<void> sendCommand(String direction) async {
     if (!isConnected) {
       print('❌ Pas de connexion pour envoyer: $direction');
@@ -299,9 +151,9 @@ class _ManuelPageState extends State<ManuelPage> {
 
     // Éviter d'envoyer la même commande en boucle
     if (currentCommand == direction) return;
-    
+
     currentCommand = direction;
-    
+
     // Limiter la fréquence des commandes
     _commandTimer?.cancel();
     _commandTimer = Timer(const Duration(milliseconds: 100), () {
@@ -311,7 +163,7 @@ class _ManuelPageState extends State<ManuelPage> {
     try {
       // Option 1: Utiliser l'ancien format /move?dir= si votre Arduino l'attend
       bool success = await _sendOldFormatCommand(direction);
-      
+
       // Option 2: Si ça ne marche pas, essayer le nouveau format /command
       if (!success) {
         success = await _connectionManager.sendCommand(direction.toUpperCase());
@@ -327,13 +179,16 @@ class _ManuelPageState extends State<ManuelPage> {
     }
   }
 
-  // NOUVELLE MÉTHODE : Envoyer commande avec l'ancien format
+  // Envoyer commande avec l'ancien format
   Future<bool> _sendOldFormatCommand(String direction) async {
     try {
-      final response = await http.get(
-        Uri.parse("http://${_connectionManager.arduinoIP}/move?dir=$direction"),
-      ).timeout(const Duration(seconds: 3));
-      
+      final response = await http
+          .get(
+            Uri.parse(
+                "http://${_connectionManager.arduinoIP}/move?dir=$direction"),
+          )
+          .timeout(const Duration(seconds: 3));
+
       print("Commande envoyée: $direction | Réponse: ${response.statusCode}");
       return response.statusCode == 200;
     } catch (e) {
@@ -341,25 +196,142 @@ class _ManuelPageState extends State<ManuelPage> {
       return false;
     }
   }
+  // NOUVELLE MÉTHODE : Démarrage progressif de la vitesse
+  void _startProgressiveSpeed(String direction) {
+    _speedTimer?.cancel();
+    _currentSpeed = 30.0; // Vitesse de démarrage douce (30%)
+    _isMoving = true;
+    
+    // Envoyer la première commande avec vitesse réduite
+    _sendCommandWithSpeed(direction, _currentSpeed.round());
+    
+    // Augmenter progressivement la vitesse
+    _speedTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (_currentSpeed < 85.0) { // Vitesse max à 85% pour éviter les à-coups
+        _currentSpeed += 15.0; // Augmentation progressive
+        _sendCommandWithSpeed(direction, _currentSpeed.round());
+      } else {
+        timer.cancel(); // Arrêter l'augmentation
+      }
+    });
+  }
 
-  void _onJoystickMove(double x, double y) {
-    print('Joystick position: x=$x, y=$y');
+   // NOUVELLE MÉTHODE : Arrêt forcé avec sécurité
+  void _forceStop() {
+    _speedTimer?.cancel();
+    _currentSpeed = 0.0;
+    _isMoving = false;
+    _lastSentCommand = null;
+    
+    // Envoyer plusieurs commandes STOP pour être sûr
+    for (int i = 0; i < 3; i++) {
+      Future.delayed(Duration(milliseconds: i * 50), () {
+        _sendDirectCommand("stop");
+      });
+    }
+    
+    print("🛑 ARRÊT FORCÉ du robot");
+  }
 
-    const seuil = 0.5;
-
-    if (y < -seuil) {
-      sendCommand("forward");
-    } else if (y > seuil) {
-      sendCommand("backward");
-    } else if (x > seuil) {
-      sendCommand("right");
-    } else if (x < -seuil) {
-      sendCommand("left");
-    } else {
-      sendCommand("stop");
+  // NOUVELLE MÉTHODE : Gérer l'arrêt proprement
+  void _handleStop() {
+    if (_isMoving) {
+      print("🛑 Joystick au centre - Arrêt");
+      _forceStop();
+      _resetStopTimer();
     }
   }
 
+   // NOUVELLE MÉTHODE : Timer d'arrêt automatique (sécurité)
+  void _resetStopTimer() {
+    _stopTimer?.cancel();
+    _stopTimer = Timer(const Duration(milliseconds: 500), () {
+      print("⏰ Timeout - Arrêt automatique");
+      _forceStop();
+    });
+  }
+
+  // NOUVELLE MÉTHODE : Envoyer commande avec vitesse
+  Future<void> _sendCommandWithSpeed(String direction, int speed) async {
+    if (!isConnected) return;
+
+    try {
+      // Format: /move?dir=forward&speed=50
+      final response = await http.get(
+        Uri.parse("http://${_connectionManager.arduinoIP}/move?dir=$direction&speed=$speed"),
+      ).timeout(const Duration(seconds: 1));
+
+      if (response.statusCode == 200) {
+        print("✅ $direction (${speed}%)");
+      }
+    } catch (e) {
+      print("❌ Erreur vitesse: $e");
+      // Si ça ne marche pas avec speed, essayer sans
+      _sendDirectCommand(direction);
+    }
+  }
+
+  // NOUVELLE MÉTHODE : Commande directe (fallback)
+  Future<void> _sendDirectCommand(String direction) async {
+    if (!isConnected) return;
+
+    try {
+      final response = await http.get(
+        Uri.parse("http://${_connectionManager.arduinoIP}/move?dir=$direction"),
+      ).timeout(const Duration(seconds: 1));
+      
+      if (response.statusCode == 200) {
+        print("✅ Commande directe: $direction");
+      }
+    } catch (e) {
+      print("❌ Erreur commande directe: $e");
+    }
+  }
+
+  // NOUVELLE MÉTHODE : Déterminer la direction
+  String _getDirection(double x, double y, double seuil) {
+    // Mouvements diagonaux (priorité)
+    if (y < -seuil && x > seuil) return "forward_right";
+    if (y < -seuil && x < -seuil) return "forward_left";
+    if (y > seuil && x > seuil) return "backward_right";
+    if (y > seuil && x < -seuil) return "backward_left";
+    
+    // Mouvements cardinaux
+    if (y < -seuil) return "forward";
+    if (y > seuil) return "backward";
+    if (x > seuil) return "right";
+    if (x < -seuil) return "left";
+    
+    return "stop";
+  }
+
+  void _onJoystickMove(double x, double y) {
+    print('Joystick: x=$x, y=$y');
+
+    // Augmenter le seuil pour réduire la sensibilité
+    const seuil = 0.45; // Augmenté de 0.3 à 0.45
+    double amplitude = sqrt(x * x + y * y);
+
+    // Zone morte plus large pour éviter les démarrages accidentels
+    if (amplitude < seuil) {
+      _handleStop();
+      return;
+    }
+
+    // Déterminer la direction
+    String direction = _getDirection(x, y, seuil);
+    
+    // Si c'est une nouvelle direction ou le premier mouvement
+    if (direction != _lastSentCommand || !_isMoving) {
+      print("🎮 Nouvelle direction: $direction");
+      _lastSentCommand = direction;
+      _startProgressiveSpeed(direction);
+    }
+
+    // Réinitialiser le timer d'arrêt automatique
+    _resetStopTimer();
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -373,17 +345,9 @@ class _ManuelPageState extends State<ManuelPage> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // Header
-              const Text(
-                'Navigation autonome',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
               const SizedBox(height: 8),
               const Text(
-                'Contrôle manuel',
+                'Contrôle manuel avec vision',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey,
@@ -396,19 +360,130 @@ class _ManuelPageState extends State<ManuelPage> {
                   color: Colors.grey,
                 ),
               ),
-              
-              // MODIFIÉ : Affichage dynamique de l'état du robot
-              Text(
-                isConnected ? '• Robot disponible' : '• Robot non connecté',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isConnected ? Colors.green : Colors.red,
+
+              const SizedBox(height: 20),
+
+              // Section Caméra
+              Card(
+                elevation: 4,
+                child: Column(
+                  children: [
+                    // En-tête de la caméra
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(8),
+                          topRight: Radius.circular(8),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.videocam,
+                            size: 18,
+                            color: _cameraLoaded ? Colors.green : Colors.grey,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Vision Robot',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: _cameraLoaded ? Colors.black : Colors.grey,
+                            ),
+                          ),
+                          const Spacer(),
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: _cameraLoaded ? Colors.green : Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: Icon(
+                              _showCamera
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                              size: 18,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _showCamera = !_showCamera;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Vue de la caméra
+                    if (_showCamera) ...[
+                      Container(
+                        height: 200,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(8),
+                            bottomRight: Radius.circular(8),
+                          ),
+                        ),
+                        child: isConnected
+                            ? Stack(
+                                children: [
+                                  WebViewWidget(controller: _cameraController),
+                                  if (!_cameraLoaded)
+                                    Container(
+                                      color: Colors.black54,
+                                      child: const Center(
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            CircularProgressIndicator(
+                                                color: Colors.white),
+                                            SizedBox(height: 8),
+                                            Text(
+                                              'Connexion caméra...',
+                                              style: TextStyle(
+                                                  color: Colors.white),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              )
+                            : const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.videocam_off,
+                                        color: Colors.grey, size: 40),
+                                    SizedBox(height: 8),
+                                    Text('Caméra non disponible',
+                                        style: TextStyle(color: Colors.grey)),
+                                    Text('Connectez-vous au robot',
+                                        style: TextStyle(
+                                            color: Colors.grey, fontSize: 12)),
+                                  ],
+                                ),
+                              ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 20),
 
-              // AJOUTÉ : Indicateur de connexion plus visible
+              // Indicateur de connexion si pas connecté
               if (!isConnected)
                 Container(
                   width: double.infinity,
@@ -434,7 +509,7 @@ class _ManuelPageState extends State<ManuelPage> {
                 ),
 
               // Joystick
-              Opacity( // AJOUTÉ : Rendre le joystick transparent si pas connecté
+              Opacity(
                 opacity: isConnected ? 1.0 : 0.5,
                 child: JoystickWidget(
                   onJoystickMove: _onJoystickMove,
@@ -443,78 +518,7 @@ class _ManuelPageState extends State<ManuelPage> {
 
               const SizedBox(height: 40),
 
-              // Mode autonomous toggle
-              Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: modeAutonome ? Colors.green : Colors.grey,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Mode autonome',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                  ),
-                  Switch(
-                    value: modeAutonome,
-                    onChanged: isConnected ? (value) { // MODIFIÉ : Désactiver si pas connecté
-                      setState(() => modeAutonome = value);
-                      if (value) {
-                        print('Mode autonome activé');
-                        sendCommand('autonomous_on'); // AJOUTÉ : Envoyer commande
-                      } else {
-                        print('Mode manuel activé');
-                        sendCommand('autonomous_off'); // AJOUTÉ : Envoyer commande
-                      }
-                    } : null, // Désactivé si pas connecté
-                    activeColor: Colors.green,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // Statistics
-              const Text(
-                'Statistique de trajet',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              Row(
-                children: [
-                  const Text('100m',
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Slider(
-                      value: statistiqueTrajet,
-                      min: 0,
-                      max: 200,
-                      activeColor: Colors.green,
-                      onChanged: (value) {
-                        setState(() => statistiqueTrajet = value);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text('Suivi des mouvements',
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // Connection Status - MODIFIÉ pour être dynamique
+              // Connection Status
               const Text(
                 'État de la connexion',
                 style: TextStyle(
@@ -530,7 +534,7 @@ class _ManuelPageState extends State<ManuelPage> {
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: isConnected ? Colors.green : Colors.red, // MODIFIÉ : couleur dynamique
+                      color: isConnected ? Colors.green : Colors.red,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -539,13 +543,13 @@ class _ManuelPageState extends State<ManuelPage> {
                     etatConnexion,
                     style: TextStyle(
                       fontSize: 12,
-                      color: isConnected ? Colors.green : Colors.red, // MODIFIÉ : couleur dynamique
+                      color: isConnected ? Colors.green : Colors.red,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   const Spacer(),
-                  
-                  // AJOUTÉ : Afficher l'IP si connecté
+
+                  // Afficher l'IP si connecté
                   if (isConnected) ...[
                     Text(
                       'IP: ${_connectionManager.arduinoIP}',
@@ -556,7 +560,7 @@ class _ManuelPageState extends State<ManuelPage> {
                     ),
                     const SizedBox(width: 8),
                   ],
-                  
+
                   Text(
                     signalForce,
                     style: const TextStyle(
@@ -567,7 +571,7 @@ class _ManuelPageState extends State<ManuelPage> {
                 ],
               ),
 
-              // AJOUTÉ : Affichage de la commande actuelle
+              // Affichage de la commande actuelle
               if (isConnected && currentCommand != null)
                 Container(
                   margin: const EdgeInsets.only(top: 16),
@@ -583,7 +587,8 @@ class _ManuelPageState extends State<ManuelPage> {
                       const SizedBox(width: 4),
                       Text(
                         'Commande: $currentCommand',
-                        style: const TextStyle(fontSize: 10, color: Colors.blue),
+                        style:
+                            const TextStyle(fontSize: 10, color: Colors.blue),
                       ),
                     ],
                   ),
