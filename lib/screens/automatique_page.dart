@@ -8,39 +8,56 @@ class AutomatiquePage extends StatefulWidget {
 }
 
 class _AutomatiquePageState extends State<AutomatiquePage> {
-  final TextEditingController _destinationController = TextEditingController();
+  final TextEditingController _latDegreesController = TextEditingController();
+  final TextEditingController _latMinutesController = TextEditingController();
+  final TextEditingController _latSecondsController = TextEditingController();
+  final TextEditingController _longDegreesController = TextEditingController();
+  final TextEditingController _longMinutesController = TextEditingController();
+  final TextEditingController _longSecondsController = TextEditingController();
+  
+  String _latDirection = 'N';
+  String _longDirection = 'E';
   double statistiqueTrajet = 100;
 
-  List<Map<String, String>> locations = [
-    {'name': 'Salle 101', 'status': 'OK'},
-    {'name': 'Salle 102', 'status': 'OK'},
-    {'name': 'Salle 103', 'status': 'OK'},
+  // Suggestions de coordonnées
+  List<Map<String, String>> suggestions = [
+    {'coordinates': '48°50\'18"N,2°18\'41"E', 'description': 'Paris Centre'},
+    {'coordinates': '48°51\'29"N,2°17\'40"E', 'description': 'Arc de Triomphe'},
+    {'coordinates': '48°52\'08"N,2°19\'56"E', 'description': 'Sacré-Cœur'},
   ];
 
   void _handleGoButtonPressed() {
-    String destination = _destinationController.text.trim();
-    if (destination.isNotEmpty) {
-      // Ici vous pouvez envoyer les données
-      print('Destination sélectionnée: $destination');
-      // Exemple d'envoi de données - remplacez par votre logique
-      _sendDestinationData(destination);
+    String latDegrees = _latDegreesController.text.trim();
+    String latMinutes = _latMinutesController.text.trim();
+    String latSeconds = _latSecondsController.text.trim();
+    String longDegrees = _longDegreesController.text.trim();
+    String longMinutes = _longMinutesController.text.trim();
+    String longSeconds = _longSecondsController.text.trim();
+    
+    if (latDegrees.isNotEmpty && latMinutes.isNotEmpty && latSeconds.isNotEmpty &&
+        longDegrees.isNotEmpty && longMinutes.isNotEmpty && longSeconds.isNotEmpty) {
+      String coordinates = '${latDegrees}°${latMinutes}\'${latSeconds}"$_latDirection,${longDegrees}°${longMinutes}\'${longSeconds}"$_longDirection';
+      print('Coordonnées sélectionnées: $coordinates');
+      _sendCoordinatesData(coordinates);
     } else {
-      // Afficher un message d'erreur si le champ est vide
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Veuillez entrer une destination'),
+          content: Text('Veuillez remplir tous les champs de coordonnées'),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  void _sendDestinationData(String destination) {
-    // Implémentez ici votre logique d'envoi de données
-    // Par exemple: appel API, navigation, etc.
+  void _handleSuggestionPressed(String coordinates) {
+    print('Coordonnées suggérées sélectionnées: $coordinates');
+    _sendCoordinatesData(coordinates);
+  }
+
+  void _sendCoordinatesData(String coordinates) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Destination envoyée: $destination'),
+        content: Text('Coordonnées envoyées: $coordinates'),
         backgroundColor: Colors.green,
       ),
     );
@@ -48,7 +65,12 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
 
   @override
   void dispose() {
-    _destinationController.dispose();
+    _latDegreesController.dispose();
+    _latMinutesController.dispose();
+    _latSecondsController.dispose();
+    _longDegreesController.dispose();
+    _longMinutesController.dispose();
+    _longSecondsController.dispose();
     super.dispose();
   }
 
@@ -77,13 +99,6 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
               const SizedBox(height: 8),
               const Row(
                 children: [
-                  Text(
-                    'Lieux disponibles',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
-                  ),
                   Spacer(),
                   Text(
                     'Connecté',
@@ -96,9 +111,9 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
               ),
               const SizedBox(height: 20),
               
-              // Destination Input Section
+              // Coordonnées Input Section
               const Text(
-                'Entrer votre destination',
+                'Entrer vos coordonnées',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -106,66 +121,349 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
               ),
               const SizedBox(height: 12),
               
+              // Latitude
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _destinationController,
-                      decoration: InputDecoration(
-                        hintText: 'Saisir la destination...',
-                        hintStyle: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[500],
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide(color: Colors.grey[300]!),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: const BorderSide(color: Colors.green),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
-                        ),
-                      ),
-                    ),
+                  const Text(
+                    'Latitude',
+                    style: TextStyle(fontSize: 14),
                   ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _handleGoButtonPressed,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
+                  const SizedBox(width: 12),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Radio<String>(
+                        value: 'N',
+                        groupValue: _latDirection,
+                        onChanged: (value) {
+                          setState(() {
+                            _latDirection = value!;
+                          });
+                        },
+                        activeColor: Colors.blue,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      decoration: BoxDecoration(
-                        color: Colors.green[50],
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.green),
+                      const Text('N', style: TextStyle(fontSize: 14)),
+                      const SizedBox(width: 4),
+                      Radio<String>(
+                        value: 'S',
+                        groupValue: _latDirection,
+                        onChanged: (value) {
+                          setState(() {
+                            _latDirection = value!;
+                          });
+                        },
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: const Text(
-                        'GO',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.green,
-                          fontWeight: FontWeight.w500,
+                      const Text('S', style: TextStyle(fontSize: 14)),
+                    ],
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: _latDegreesController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: '°',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: const BorderSide(color: Colors.green),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 2),
+                          child: Text('°', style: TextStyle(fontSize: 12)),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: _latMinutesController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: '\'',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: const BorderSide(color: Colors.green),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 2),
+                          child: Text('\'', style: TextStyle(fontSize: 12)),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: _latSecondsController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: '"',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: const BorderSide(color: Colors.green),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 2),
+                          child: Text('"', style: TextStyle(fontSize: 12)),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
               
+              const SizedBox(height: 12),
+              
+              // Longitude
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Longitude',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(width: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Radio<String>(
+                        value: 'E',
+                        groupValue: _longDirection,
+                        onChanged: (value) {
+                          setState(() {
+                            _longDirection = value!;
+                          });
+                        },
+                        activeColor: Colors.blue,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      const Text('E', style: TextStyle(fontSize: 14)),
+                      const SizedBox(width: 4),
+                      Radio<String>(
+                        value: 'O',
+                        groupValue: _longDirection,
+                        onChanged: (value) {
+                          setState(() {
+                            _longDirection = value!;
+                          });
+                        },
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      const Text('O', style: TextStyle(fontSize: 14)),
+                    ],
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: _longDegreesController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: '°',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: const BorderSide(color: Colors.green),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 2),
+                          child: Text('°', style: TextStyle(fontSize: 12)),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: _longMinutesController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: '\'',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: const BorderSide(color: Colors.green),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 2),
+                          child: Text('\'', style: TextStyle(fontSize: 12)),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: _longSecondsController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              hintText: '"',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: const BorderSide(color: Colors.green),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 2),
+                          child: Text('"', style: TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Bouton GO
+              Center(
+                child: GestureDetector(
+                  onTap: _handleGoButtonPressed,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.green),
+                    ),
+                    child: const Text(
+                      'GO',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.green,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              
               const SizedBox(height: 20),
               
-              // Location list
-              ...locations.map((location) => _buildLocationItem(location)),
+              // Suggestions
+              const Text(
+                'Suggestions',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              
+              ...suggestions.map((suggestion) => _buildSuggestionItem(suggestion)),
               
               const SizedBox(height: 20),
               
@@ -206,34 +504,53 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
     );
   }
 
-  Widget _buildLocationItem(Map<String, String> location) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: Colors.green,
-              shape: BoxShape.circle,
-            ),
+  Widget _buildSuggestionItem(Map<String, String> suggestion) {
+    return GestureDetector(
+      onTap: () => _handleSuggestionPressed(suggestion['coordinates']!),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Colors.grey[200]!,
+            width: 1,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              location['name'] ?? '',
-              style: const TextStyle(fontSize: 14),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+              ),
             ),
-          ),
-          Text(
-            location['status'] ?? '',
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.grey,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                suggestion['description'] ?? '',
+                style: const TextStyle(fontSize: 14),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 12,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(width: 8),
+            Text(
+              suggestion['coordinates'] ?? '',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
