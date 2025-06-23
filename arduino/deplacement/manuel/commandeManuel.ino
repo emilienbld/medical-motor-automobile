@@ -14,7 +14,7 @@ WiFiServer server(80);
 
 char command = 0;
 
-void setup() {
+void setup() { 
   // Configuration des pins moteurs
   pinMode(PWMA, OUTPUT);
   pinMode(PWMB, OUTPUT);
