@@ -12,6 +12,11 @@ WiFiServer server(80);
 #define BIN 8     // Left motor direction
 #define STBY 3    // Motor enable/disable
 
+// NOUVEAU: Variables pour les rotations automatiques
+unsigned long rotationStartTime = 0;
+bool isRotating = false;
+const unsigned long ROTATION_90_DURATION = 200; // RÉDUIT de 400ms à 200ms pour 90°
+
 char command = 0;
 
 void setup() { 
@@ -24,7 +29,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
 
   Serial.begin(9600);
-  Serial.println("=== Démarrage Robot MMA v2.2 (Moteurs corrigés) ===");
+  Serial.println("=== Démarrage Robot MMA v2.3 (Rotations 90°) ===");
   
   // Désactiver les moteurs au démarrage
   digitalWrite(STBY, LOW);
@@ -56,8 +61,8 @@ void setup() {
   Serial.println("Contrôles disponibles:");
   Serial.println("- Application Flutter (WiFi)");
   Serial.println("- Terminal série (Z/Q/S/D/X)");
+  Serial.println("- Rotations 90° automatiques");
   Serial.println("- Mouvements diagonaux supportés");
-  Serial.println("- Rotations corrigées");
   
   // Faire clignoter la LED pour indiquer que c'est prêt
   for(int i = 0; i < 5; i++) {
@@ -69,6 +74,9 @@ void setup() {
 }
 
 void loop() {
+  // NOUVEAU: Vérifier si on doit arrêter la rotation automatiquement
+  checkRotationTimeout();
+  
   // PARTIE 1: Gestion des connexions WiFi
   WiFiClient client = server.available();
   
@@ -113,7 +121,19 @@ void loop() {
   }
 }
 
-// Fonction SIMPLIFIÉE pour traiter les requêtes HTTP
+// NOUVELLE FONCTION: Vérifier le timeout des rotations
+void checkRotationTimeout() {
+  if (isRotating) {
+    unsigned long elapsedTime = millis() - rotationStartTime;
+    if (elapsedTime >= ROTATION_90_DURATION) {
+      Serial.println("🛑 Fin rotation automatique (90°)");
+      stopMotors();
+      isRotating = false;
+    }
+  }
+}
+
+// Fonction MODIFIÉE pour traiter les requêtes HTTP
 void processHTTPRequest(String request, WiFiClient& client) {
   Serial.println("Requête reçue:");
   
@@ -133,11 +153,10 @@ void processHTTPRequest(String request, WiFiClient& client) {
     if (dirEnd == -1) dirEnd = path.length();
     String direction = path.substring(dirStart, dirEnd);
     
-    // IGNORER le paramètre speed pour éviter les problèmes
     Serial.print("Direction: ");
     Serial.println(direction);
     
-    // Convertir la direction en commande SIMPLE (vitesse fixe)
+    // Convertir la direction en commande
     if (direction == "forward") {
       Serial.println("-> Commande: AVANCER");
       forward();
@@ -146,15 +165,16 @@ void processHTTPRequest(String request, WiFiClient& client) {
       Serial.println("-> Commande: RECULER");
       backward();
     } 
+    // MODIFIÉ: Rotations automatiques 90°
     else if (direction == "left") {
-      Serial.println("-> Commande: GAUCHE");
-      left();
+      Serial.println("-> Commande: ROTATION GAUCHE 90°");
+      rotateLeft90();
     } 
     else if (direction == "right") {
-      Serial.println("-> Commande: DROITE");
-      right();
+      Serial.println("-> Commande: ROTATION DROITE 90°");
+      rotateRight90();
     }
-    // Mouvements diagonaux SIMPLES
+    // Mouvements diagonaux (pas de rotation auto)
     else if (direction == "forward_right") {
       Serial.println("-> Commande: AVANCER-DROITE");
       forwardRight();
@@ -174,6 +194,7 @@ void processHTTPRequest(String request, WiFiClient& client) {
     else if (direction == "stop") {
       Serial.println("-> Commande: STOP");
       stopMotors();
+      isRotating = false; // NOUVEAU: Arrêter la rotation si en cours
     }
     else {
       Serial.print("-> Commande inconnue: ");
@@ -197,7 +218,7 @@ void processHTTPRequest(String request, WiFiClient& client) {
     client.println("<!DOCTYPE HTML>");
     client.println("<html>");
     client.println("<head>");
-    client.println("<title>Robot MMA v2.2 Corrigé</title>");
+    client.println("<title>Robot MMA v2.3 - Rotations 90°</title>");
     client.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
     client.println("<style>");
     client.println("body { font-family: Arial; text-align: center; margin: 20px; background: #f0f0f0; }");
@@ -207,12 +228,12 @@ void processHTTPRequest(String request, WiFiClient& client) {
     client.println("</style>");
     client.println("</head>");
     client.println("<body>");
-    client.println("<h1>🤖 Robot MMA v2.2 Corrigé</h1>");
+    client.println("<h1>🤖 Robot MMA v2.3 - Rotations 90°</h1>");
     client.println("<div class='status'>✓ Serveur actif et prêt</div>");
     client.println("<p><strong>IP:</strong> 192.168.4.1</p>");
-    client.println("<div class='feature'>✅ Rotations corrigées</div>");
+    client.println("<div class='feature'>✅ Rotations 90° automatiques</div>");
     client.println("<div class='feature'>✅ Mouvements 8 directions</div>");
-    client.println("<div class='feature'>✅ Consommation optimisée</div>");
+    client.println("<div class='feature'>✅ Timeout sécurisé</div>");
     client.println("<p>Utilisez l'application Flutter pour contrôler le robot</p>");
     client.println("</body>");
     client.println("</html>");
@@ -225,7 +246,7 @@ void processHTTPRequest(String request, WiFiClient& client) {
   }
 }
 
-// Fonction de gestion des commandes (pour terminal série)
+// Fonction de gestion des commandes (pour terminal série) - MODIFIÉE
 void handleCommand(char cmd) {
   digitalWrite(STBY, HIGH); // Activer les moteurs
 
@@ -236,14 +257,16 @@ void handleCommand(char cmd) {
     case 's':  // Reculer
       backward();
       break;
-    case 'd':  // Tourner droite
-      right();
+    // MODIFIÉ: Rotations automatiques depuis le terminal aussi
+    case 'd':  // Tourner droite 90°
+      rotateRight90();
       break;
-    case 'q':  // Tourner gauche
-      left();
+    case 'q':  // Tourner gauche 90°
+      rotateLeft90();
       break;
     case 'x':  // Stop
       stopMotors();
+      isRotating = false;
       break;
     // Raccourcis pour diagonales
     case '1':  // Avancer-droite
@@ -260,15 +283,16 @@ void handleCommand(char cmd) {
       break;
     default:
       Serial.println("Commande inconnue");
-      Serial.println("Commandes disponibles: Z(avant) S(arrière) Q(gauche) D(droite) X(stop)");
+      Serial.println("Commandes disponibles: Z(avant) S(arrière) Q(gauche 90°) D(droite 90°) X(stop)");
       Serial.println("Diagonales: 1(av-droite) 2(av-gauche) 3(ar-droite) 4(ar-gauche)");
       break;
   }
 }
 
-// ===== FONCTIONS DE MOUVEMENT CORRIGÉES (UNE SEULE VERSION) =====
+// ===== FONCTIONS DE MOUVEMENT (inchangées) =====
 
 void forward() {
+  isRotating = false; // Pas une rotation
   digitalWrite(STBY, HIGH);
   digitalWrite(AIN, HIGH);  // Moteur droit AVANT
   digitalWrite(BIN, HIGH);  // Moteur gauche AVANT
@@ -278,6 +302,7 @@ void forward() {
 }
 
 void backward() {
+  isRotating = false; // Pas une rotation
   digitalWrite(STBY, HIGH);
   digitalWrite(AIN, LOW);   // Moteur droit ARRIÈRE
   digitalWrite(BIN, LOW);   // Moteur gauche ARRIÈRE
@@ -286,27 +311,56 @@ void backward() {
   Serial.println(">>> RECULER (vitesse stable)");
 }
 
-void left() {
+// NOUVELLES FONCTIONS: Rotations automatiques 90°
+void rotateLeft90() {
+  Serial.println("🔄 DÉMARRAGE rotation gauche 90°");
+  isRotating = true;
+  rotationStartTime = millis();
+  
   digitalWrite(STBY, HIGH);
   digitalWrite(AIN, HIGH);  // Moteur droit AVANT (rapide)
-  digitalWrite(BIN, LOW);   // Moteur gauche ARRIÈRE (ou stop)
+  digitalWrite(BIN, LOW);   // Moteur gauche ARRIÈRE 
+  analogWrite(PWMA, 220);   // Droit rapide pour rotation nette
+  analogWrite(PWMB, 220);   // Gauche rapide pour rotation nette
+}
+
+void rotateRight90() {
+  Serial.println("🔄 DÉMARRAGE rotation droite 90°");
+  isRotating = true;
+  rotationStartTime = millis();
+  
+  digitalWrite(STBY, HIGH);
+  digitalWrite(AIN, LOW);   // Moteur droit ARRIÈRE
+  digitalWrite(BIN, HIGH);  // Moteur gauche AVANT (rapide)
+  analogWrite(PWMA, 220);   // Droit rapide pour rotation nette
+  analogWrite(PWMB, 220);   // Gauche rapide pour rotation nette
+}
+
+// ANCIENNES FONCTIONS: Renommées pour éviter la confusion
+void left() {
+  // Rotation continue (pour diagonales ou cas spéciaux)
+  digitalWrite(STBY, HIGH);
+  digitalWrite(AIN, HIGH);  // Moteur droit AVANT (rapide)
+  digitalWrite(BIN, LOW);   // Moteur gauche ARRIÈRE 
   analogWrite(PWMA, 200);   // Droit rapide
   analogWrite(PWMB, 100);   // Gauche lent
-  Serial.println(">>> GAUCHE (rotation)");
+  Serial.println(">>> GAUCHE (rotation continue)");
 }
 
 void right() {
+  // Rotation continue (pour diagonales ou cas spéciaux)
   digitalWrite(STBY, HIGH);
-  digitalWrite(AIN, LOW);   // Moteur droit ARRIÈRE (ou stop)  
+  digitalWrite(AIN, LOW);   // Moteur droit ARRIÈRE
   digitalWrite(BIN, HIGH);  // Moteur gauche AVANT (rapide)
   analogWrite(PWMA, 100);   // Droit lent
   analogWrite(PWMB, 200);   // Gauche rapide
-  Serial.println(">>> DROITE (rotation)");
+  Serial.println(">>> DROITE (rotation continue)");
 }
 
-// ===== FONCTIONS DIAGONALES CORRIGÉES (comme avant mais avec nouvelles rotations) =====
+// ===== FONCTIONS DIAGONALES (inchangées) =====
 
 void forwardRight() {
+  isRotating = false; // Pas une rotation pure
   digitalWrite(STBY, HIGH);
   digitalWrite(AIN, HIGH);  // Moteur droit AVANT
   digitalWrite(BIN, HIGH);  // Moteur gauche AVANT
@@ -316,6 +370,7 @@ void forwardRight() {
 }
 
 void forwardLeft() {
+  isRotating = false; // Pas une rotation pure
   digitalWrite(STBY, HIGH);
   digitalWrite(AIN, HIGH);  // Moteur droit AVANT
   digitalWrite(BIN, HIGH);  // Moteur gauche AVANT
@@ -325,6 +380,7 @@ void forwardLeft() {
 }
 
 void backwardRight() {
+  isRotating = false; // Pas une rotation pure
   digitalWrite(STBY, HIGH);
   digitalWrite(AIN, LOW);   // Moteur droit ARRIÈRE
   digitalWrite(BIN, LOW);   // Moteur gauche ARRIÈRE
@@ -334,6 +390,7 @@ void backwardRight() {
 }
 
 void backwardLeft() {
+  isRotating = false; 
   digitalWrite(STBY, HIGH);
   digitalWrite(AIN, LOW);   // Moteur droit ARRIÈRE
   digitalWrite(BIN, LOW);   // Moteur gauche ARRIÈRE
