@@ -1,27 +1,3 @@
-// import 'package:flutter/material.dart';
-// import 'navigation/main_navigation.dart';
-// import 'services/wifi_connection_manager.dart';
-
-// void main() {
-//   runApp(const ZiggyCarApp());
-// }
-
-// class ZiggyCarApp extends StatelessWidget {
-//   const ZiggyCarApp({Key? key}) : super(key: key);
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return MaterialApp(
-//       title: 'ZIGGY CAR',
-//       theme: ThemeData(
-//         primarySwatch: Colors.blue,
-//         fontFamily: 'SF Pro',
-//       ),
-//       home: const MainNavigationPage(),
-//       debugShowCheckedModeBanner: false,
-//     );
-//   }
-// }
 import 'package:flutter/material.dart';
 import 'navigation/main_navigation.dart';
 import 'services/wifi_connection_manager.dart';
