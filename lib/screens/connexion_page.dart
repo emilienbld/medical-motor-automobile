@@ -51,7 +51,7 @@ class ConnexionPage extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Bienvenue sur ZIGGY CAR',
+                                'Bienvenue sur MMA',
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
@@ -70,52 +70,6 @@ class ConnexionPage extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Description du projet
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'À propos du projet',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'ZIGGY CAR est un robot autonome conçu pour faciliter la livraison de médicaments et de matériel médical. '
-                      'Grâce à son système de navigation GPS avancé, il peut se rendre automatiquement à des coordonnées précises '
-                      'pour effectuer des livraisons urgentes ou régulières.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[700],
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Le robot dispose également d\'un mode manuel avec caméra embarquée, permettant un contrôle '
-                      'à distance pour les situations nécessitant une intervention humaine.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[700],
-                        height: 1.5,
-                      ),
                     ),
                   ],
                 ),
@@ -169,6 +123,52 @@ class ConnexionPage extends StatelessWidget {
                       title: 'Livraison médicale',
                       description: 'Transport sécurisé de médicaments et matériel médical',
                       color: Colors.red,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Description du projet
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'À propos du projet',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'MMA - Medical Motor Automobile - est un robot autonome conçu pour faciliter la livraison de médicaments et de matériel médical. '
+                      'Grâce à son système de navigation GPS avancé, il peut se rendre automatiquement à des coordonnées précises '
+                      'pour effectuer des livraisons urgentes ou régulières.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Le robot dispose également d\'un mode manuel avec caméra embarquée, permettant un contrôle '
+                      'à distance pour les situations nécessitant une intervention humaine.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        height: 1.5,
+                      ),
                     ),
                   ],
                 ),
