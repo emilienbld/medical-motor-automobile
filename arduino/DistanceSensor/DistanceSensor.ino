@@ -1,8 +1,8 @@
 #include "DistanceSensor.h"
 
 // Définition des broches
-const int trigPin = 9;
-const int echoPin = 10;
+const int trigPin = 13;
+const int echoPin = 12;
 
 // Instanciation de l'objet capteur
 DistanceSensor capteur(trigPin, echoPin);
