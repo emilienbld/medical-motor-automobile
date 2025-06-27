@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "790974634846",
+    "project_id": "medical-motor-automobile",
+    "storage_bucket": "medical-motor-automobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:790974634846:android:cb0e8cfd53ca5c32598dcf",
+        "android_client_info": {
+          "package_name": "com.example.voiture_autonome"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgtXhrrvTBHVV0QDpjKj-dTuvAhFQXWGI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:790974634846:android:ea0f5f96ec9bd318598dcf",
+        "android_client_info": {
+          "package_name": "com.ziggy.appname"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgtXhrrvTBHVV0QDpjKj-dTuvAhFQXWGI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

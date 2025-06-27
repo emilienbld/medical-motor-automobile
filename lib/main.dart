@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart'; // Sera généré par flutterfire configure
 import 'navigation/main_navigation.dart';
 import 'services/wifi_connection_manager.dart';
 
-void main() {
+void main() async {
+  // ✅ Ajout obligatoire
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // ✅ Initialiser Firebase AVANT de lancer l'app
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   runApp(const ZiggyCarApp());
 }
 

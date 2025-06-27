@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 
 class AutomatiquePage extends StatefulWidget {
@@ -24,16 +25,21 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
   Duration _elapsedTime = Duration.zero;
   bool _isNavigating = false;
 
-  // Suggestions de coordonnées
-  List<Map<String, String>> suggestions = [
-    {'coordinates': '48°50\'18"N,2°18\'41"E', 'description': 'Paris Centre'},
-    {'coordinates': '48°51\'29"N,2°17\'40"E', 'description': 'Arc de Triomphe'},
-    {'coordinates': '48°52\'08"N,2°19\'56"E', 'description': 'Sacré-Cœur'},
-  ];
+  // Instance Firestore
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  // Stream pour les destinations (créé une seule fois pour éviter les freeze)
+  late Stream<QuerySnapshot> _destinationsStream;
 
   @override
   void initState() {
     super.initState();
+    
+    // Initialiser le stream une seule fois pour éviter les reconstructions
+    _destinationsStream = _firestore
+        .collection('destinations')
+        .orderBy('lieu')
+        .snapshots();
     
     // Ajouter des listeners pour vérifier si tous les champs sont remplis
     _latDegreesController.addListener(_checkFieldsCompletion);
@@ -57,7 +63,90 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
            _longSecondsController.text.isNotEmpty;
   }
 
-  void _handleGoButtonPressed() {
+  // Fonction pour sauvegarder les coordonnées personnalisées dans Firebase
+  Future<void> _saveCustomCoordinates(String coordinates) async {
+    try {
+      // Demander à l'utilisateur une description
+      String? description = await _showDescriptionDialog();
+      
+      if (description != null && description.isNotEmpty) {
+        await _firestore.collection('destinations').add({
+          'coordonnees': coordinates,
+          'lieu': description,
+          'historique': true, // Marquer comme historique car c'est personnalisé
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Destination sauvegardée: $description'),
+            backgroundColor: Colors.blue,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de la sauvegarde: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<String?> _showDescriptionDialog() async {
+    final TextEditingController descController = TextEditingController();
+    
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sauvegarder cette destination'),
+        content: TextField(
+          controller: descController,
+          decoration: const InputDecoration(
+            labelText: 'Nom de la destination',
+            hintText: 'Ex: Mon lieu favori',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, descController.text.trim()),
+            child: const Text('Sauvegarder'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool?> _showSaveDialog() async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sauvegarder ces coordonnées ?'),
+        content: const Text('Voulez-vous sauvegarder ces coordonnées pour un usage ultérieur ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Non'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Oui'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleGoButtonPressed() async {
     if (!_areAllFieldsFilled) return;
     
     String latDegrees = _latDegreesController.text.trim();
@@ -69,6 +158,13 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
     
     String coordinates = '${latDegrees}°${latMinutes}\'${latSeconds}"$_latDirection,${longDegrees}°${longMinutes}\'${longSeconds}"$_longDirection';
     print('Coordonnées sélectionnées: $coordinates');
+    
+    // Proposer de sauvegarder les coordonnées
+    bool? shouldSave = await _showSaveDialog();
+    if (shouldSave == true) {
+      await _saveCustomCoordinates(coordinates);
+    }
+    
     _sendCoordinatesData(coordinates);
   }
 
@@ -600,67 +696,179 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
             
             const SizedBox(height: 20),
             
-            // Section Suggestions
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            // StreamBuilder optimisé pour éviter les freeze
+            StreamBuilder<QuerySnapshot>(
+              stream: _destinationsStream,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red, width: 1),
+                    ),
+                    child: Text(
+                      'Erreur: ${snapshot.error}',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  );
+                }
+                
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  );
+                }
+                
+                final docs = snapshot.data?.docs ?? [];
+                
+                if (docs.isEmpty) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('Aucune destination disponible'),
+                    ),
+                  );
+                }
+                
+                // Séparer les destinations
+                final separatedDestinations = _separateDestinations(docs);
+                final destinationsRapides = separatedDestinations['rapides']!;
+                final historiqueDestinations = separatedDestinations['historique']!;
+                
+                return Column(
                   children: [
-                    const Text(
-                      'Destinations rapides',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                    // Section Destinations rapides (historique: false)
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.flash_on, color: Colors.green[600], size: 20),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Destinations rapides',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            
+                            if (destinationsRapides.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text(
+                                  'Aucune destination rapide disponible',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              )
+                            else
+                              ...destinationsRapides.map((destination) => 
+                                _buildSuggestionItem(destination, isHistoriqueSection: false)),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 12),
                     
-                    ...suggestions.map((suggestion) => _buildSuggestionItem(suggestion)),
+                    const SizedBox(height: 16),
                     
-                    if (_selectedSuggestion != null) ...[
-                      const SizedBox(height: 16),
-                      Center(
-                        child: GestureDetector(
-                          onTap: _handleSuggestionGoPressed,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 32,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.green[50],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.green),
-                            ),
-                            child: const Text(
-                              'Y ALLER',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.green,
-                                fontWeight: FontWeight.w600,
+                    // Section Historique (historique: true)
+                    if (historiqueDestinations.isNotEmpty)
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.history, color: Colors.blue[600], size: 20),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Historique',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
+                              const SizedBox(height: 12),
+                              
+                              ...historiqueDestinations.map((destination) => 
+                                _buildSuggestionItem(destination, isHistoriqueSection: true)),
+                            ],
                           ),
                         ),
                       ),
-                    ],
                   ],
+                );
+              },
+            ),
+            
+            // Bouton "Y ALLER" pour la suggestion sélectionnée
+            if (_selectedSuggestion != null) ...[
+              const SizedBox(height: 16),
+              Center(
+                child: GestureDetector(
+                  onTap: _handleSuggestionGoPressed,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green),
+                    ),
+                    child: const Text(
+                      'Y ALLER',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.green,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSuggestionItem(Map<String, String> suggestion) {
+  Widget _buildSuggestionItem(Map<String, dynamic> suggestion, {required bool isHistoriqueSection}) {
     final isSelected = _selectedSuggestion == suggestion['coordinates'];
+    final isHistorique = suggestion['historique'] ?? false;
     
     return GestureDetector(
       onTap: () => _handleSuggestionPressed(suggestion['coordinates']!),
@@ -716,6 +924,34 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
                 ],
               ),
             ),
+            
+            // Actions à droite
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Bouton pour basculer vers/depuis l'historique
+                IconButton(
+                  icon: Icon(
+                    isHistoriqueSection ? Icons.flash_on : Icons.history,
+                    size: 18,
+                    color: isHistoriqueSection ? Colors.green[600] : Colors.blue[600],
+                  ),
+                  onPressed: () => _toggleHistorique(suggestion['id'], isHistorique),
+                  tooltip: isHistoriqueSection 
+                      ? 'Déplacer vers les destinations rapides' 
+                      : 'Ajouter à l\'historique',
+                ),
+                
+                // Bouton de suppression (seulement pour l'historique)
+                if (isHistoriqueSection)
+                  IconButton(
+                    icon: Icon(Icons.delete, size: 18, color: Colors.red[400]),
+                    onPressed: () => _deleteDestination(suggestion['id']),
+                    tooltip: 'Supprimer cette destination',
+                  ),
+              ],
+            ),
+            
             Icon(
               Icons.location_on,
               size: 20,
@@ -725,5 +961,102 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
         ),
       ),
     );
+  }
+
+  // Fonction pour supprimer une destination
+  Future<void> _deleteDestination(String documentId) async {
+    // Demander confirmation
+    bool? shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer la destination'),
+        content: const Text('Êtes-vous sûr de vouloir supprimer définitivement cette destination ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    
+    if (shouldDelete != true) return;
+    
+    try {
+      await _firestore.collection('destinations').doc(documentId).delete();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Destination supprimée'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de la suppression: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Fonction pour basculer une destination vers/depuis l'historique
+  Future<void> _toggleHistorique(String documentId, bool currentHistorique) async {
+    try {
+      await _firestore.collection('destinations').doc(documentId).update({
+        'historique': !currentHistorique,
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(currentHistorique 
+              ? 'Destination déplacée vers les destinations rapides' 
+              : 'Destination ajoutée à l\'historique'),
+          backgroundColor: Colors.blue,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Fonction pour séparer les destinations
+  Map<String, List<Map<String, dynamic>>> _separateDestinations(List<QueryDocumentSnapshot> docs) {
+    final destinationsRapides = <Map<String, dynamic>>[];
+    final historiqueDestinations = <Map<String, dynamic>>[];
+    
+    for (final doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final destination = {
+        'coordinates': data['coordonnees'] ?? '',
+        'description': data['lieu'] ?? '',
+        'id': doc.id,
+        'historique': data['historique'] ?? false,
+      };
+      
+      if (destination['historique'] as bool) {
+        historiqueDestinations.add(destination);
+      } else {
+        destinationsRapides.add(destination);
+      }
+    }
+    
+    return {
+      'rapides': destinationsRapides,
+      'historique': historiqueDestinations,
+    };
   }
 }
