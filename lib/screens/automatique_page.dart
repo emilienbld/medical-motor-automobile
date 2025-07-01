@@ -1,6 +1,12 @@
+// automatique_page.dart - VERSION OPTIMISÉE COMPLÈTE
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
+
+import '../services/wifi_connection_manager.dart';
+import '../services/gps_navigation_service.dart';
+import '../widgets/navigation_status_widget.dart';
+import '../widgets/coordinate_input_widget.dart';
 
 class AutomatiquePage extends StatefulWidget {
   const AutomatiquePage({Key? key}) : super(key: key);
@@ -10,92 +16,221 @@ class AutomatiquePage extends StatefulWidget {
 }
 
 class _AutomatiquePageState extends State<AutomatiquePage> {
-  final TextEditingController _latDegreesController = TextEditingController();
-  final TextEditingController _latMinutesController = TextEditingController();
-  final TextEditingController _latSecondsController = TextEditingController();
-  final TextEditingController _longDegreesController = TextEditingController();
-  final TextEditingController _longMinutesController = TextEditingController();
-  final TextEditingController _longSecondsController = TextEditingController();
+  // Services
+  final WiFiConnectionManager _connectionManager = WiFiConnectionManager();
+  late final GPSNavigationService _gpsNavigationService;
   
-  String _latDirection = 'N';
-  String _longDirection = 'E';
+  // État de l'interface
+  bool isConnected = false;
+  NavigationState _navigationState = NavigationState.idle;
+  String? _currentDestination;
+  Duration _navigationDuration = Duration.zero;
+  DateTime? _navigationStartTime;
   String? _selectedSuggestion;
-  DateTime? _departureTime;
-  Timer? _chronoTimer;
-  Duration _elapsedTime = Duration.zero;
-  bool _isNavigating = false;
 
   // Instance Firestore
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  // Stream pour les destinations (créé une seule fois pour éviter les freeze)
+  // Stream pour les destinations (créé une seule fois)
   late Stream<QuerySnapshot> _destinationsStream;
+  
+  // Subscriptions
+  StreamSubscription<bool>? _connectionSubscription;
+  StreamSubscription<NavigationState>? _navigationStateSubscription;
+  StreamSubscription<String?>? _destinationSubscription;
+  StreamSubscription<Duration>? _durationSubscription;
 
   @override
   void initState() {
     super.initState();
     
-    // Initialiser le stream une seule fois pour éviter les reconstructions
+    // Initialiser les services
+    _gpsNavigationService = GPSNavigationService(_connectionManager);
+    
+    // État initial
+    isConnected = _connectionManager.isConnected;
+    
+    // Initialiser le stream Firestore
     _destinationsStream = _firestore
         .collection('destinations')
         .orderBy('lieu')
         .snapshots();
     
-    // Ajouter des listeners pour vérifier si tous les champs sont remplis
-    _latDegreesController.addListener(_checkFieldsCompletion);
-    _latMinutesController.addListener(_checkFieldsCompletion);
-    _latSecondsController.addListener(_checkFieldsCompletion);
-    _longDegreesController.addListener(_checkFieldsCompletion);
-    _longMinutesController.addListener(_checkFieldsCompletion);
-    _longSecondsController.addListener(_checkFieldsCompletion);
+    _setupSubscriptions();
+    
+    // Démarrer heartbeat si connecté
+    if (isConnected) {
+      _connectionManager.startHeartbeat();
+    }
   }
 
-  void _checkFieldsCompletion() {
-    setState(() {});
+  void _setupSubscriptions() {
+    // Écouter les changements de connexion
+    _connectionSubscription = _connectionManager.connectionStream.listen((connected) {
+      setState(() {
+        isConnected = connected;
+      });
+      
+      if (!connected) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ Connexion robot perdue'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    });
+    
+    // Écouter l'état de navigation
+    _navigationStateSubscription = _gpsNavigationService.stateStream.listen((state) {
+      setState(() {
+        _navigationState = state;
+      });
+    });
+    
+    // Écouter la destination
+    _destinationSubscription = _gpsNavigationService.destinationStream.listen((destination) {
+      setState(() {
+        _currentDestination = destination;
+      });
+    });
+    
+    // Écouter la durée
+    _durationSubscription = _gpsNavigationService.durationStream.listen((duration) {
+      setState(() {
+        _navigationDuration = duration;
+        _navigationStartTime = _gpsNavigationService.navigationStartTime;
+      });
+    });
   }
 
-  bool get _areAllFieldsFilled {
-    return _latDegreesController.text.isNotEmpty &&
-           _latMinutesController.text.isNotEmpty &&
-           _latSecondsController.text.isNotEmpty &&
-           _longDegreesController.text.isNotEmpty &&
-           _longMinutesController.text.isNotEmpty &&
-           _longSecondsController.text.isNotEmpty;
+  @override
+  void dispose() {
+    _connectionSubscription?.cancel();
+    _navigationStateSubscription?.cancel();
+    _destinationSubscription?.cancel();
+    _durationSubscription?.cancel();
+    
+    _gpsNavigationService.dispose();
+    super.dispose();
   }
 
-  // Fonction pour sauvegarder les coordonnées personnalisées dans Firebase
+  // === GESTION DES COORDONNÉES ===
+
+  void _handleCoordinatesEntered(String coordinates) async {
+    print('Coordonnées saisies: $coordinates');
+    
+    if (!isConnected) {
+      _showErrorSnackBar('Robot non connecté');
+      return;
+    }
+    
+    // Proposer de sauvegarder les coordonnées
+    bool? shouldSave = await _showSaveDialog();
+    if (shouldSave == true) {
+      await _saveCustomCoordinates(coordinates);
+    }
+    
+    // Démarrer la navigation
+    await _startNavigationWithCoordinates(coordinates);
+  }
+
+  void _handleSuggestionPressed(String coordinates) {
+    setState(() {
+      _selectedSuggestion = coordinates;
+    });
+  }
+
+  void _handleSuggestionGoPressed() async {
+    if (_selectedSuggestion != null) {
+      print('Coordonnées suggérées: $_selectedSuggestion');
+      await _startNavigationWithCoordinates(_selectedSuggestion!);
+    }
+  }
+
+  Future<void> _startNavigationWithCoordinates(String coordinates) async {
+    if (!isConnected) {
+      _showErrorSnackBar('Robot non connecté');
+      return;
+    }
+    
+    try {
+      // 1. Définir la destination
+      final setSuccess = await _gpsNavigationService.setDestination(coordinates);
+      if (!setSuccess) {
+        _showErrorSnackBar('Erreur lors de la configuration de la destination');
+        return;
+      }
+      
+      // 2. Démarrer la navigation
+      final startSuccess = await _gpsNavigationService.startNavigation();
+      if (startSuccess) {
+        _showSuccessSnackBar('Navigation démarrée vers: $coordinates');
+      } else {
+        _showErrorSnackBar('Erreur lors du démarrage de la navigation');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Erreur: $e');
+    }
+  }
+
+  Future<void> _stopNavigation() async {
+    final success = await _gpsNavigationService.stopNavigation();
+    if (success) {
+      _showWarningSnackBar('Navigation arrêtée');
+    } else {
+      _showErrorSnackBar('Erreur lors de l\'arrêt');
+    }
+  }
+
+  // === GESTION FIREBASE ===
+
   Future<void> _saveCustomCoordinates(String coordinates) async {
     try {
-      // Demander à l'utilisateur une description
       String? description = await _showDescriptionDialog();
       
       if (description != null && description.isNotEmpty) {
         await _firestore.collection('destinations').add({
           'coordonnees': coordinates,
           'lieu': description,
-          'historique': true, // Marquer comme historique car c'est personnalisé
+          'historique': true,
         });
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Destination sauvegardée: $description'),
-            backgroundColor: Colors.blue,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        );
+        _showSuccessSnackBar('Destination sauvegardée: $description');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur lors de la sauvegarde: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showErrorSnackBar('Erreur lors de la sauvegarde: $e');
     }
   }
+
+  Future<void> _deleteDestination(String documentId) async {
+    bool? shouldDelete = await _showDeleteConfirmationDialog();
+    
+    if (shouldDelete != true) return;
+    
+    try {
+      await _firestore.collection('destinations').doc(documentId).delete();
+      _showWarningSnackBar('Destination supprimée');
+    } catch (e) {
+      _showErrorSnackBar('Erreur lors de la suppression: $e');
+    }
+  }
+
+  Future<void> _toggleHistorique(String documentId, bool currentHistorique) async {
+    try {
+      await _firestore.collection('destinations').doc(documentId).update({
+        'historique': !currentHistorique,
+      });
+      
+      _showInfoSnackBar(currentHistorique 
+          ? 'Déplacée vers les destinations rapides' 
+          : 'Ajoutée à l\'historique');
+    } catch (e) {
+      _showErrorSnackBar('Erreur: $e');
+    }
+  }
+
+  // === DIALOGS ===
 
   Future<String?> _showDescriptionDialog() async {
     final TextEditingController descController = TextEditingController();
@@ -146,110 +281,71 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
     );
   }
 
-  void _handleGoButtonPressed() async {
-    if (!_areAllFieldsFilled) return;
-    
-    String latDegrees = _latDegreesController.text.trim();
-    String latMinutes = _latMinutesController.text.trim();
-    String latSeconds = _latSecondsController.text.trim();
-    String longDegrees = _longDegreesController.text.trim();
-    String longMinutes = _longMinutesController.text.trim();
-    String longSeconds = _longSecondsController.text.trim();
-    
-    String coordinates = '${latDegrees}°${latMinutes}\'${latSeconds}"$_latDirection,${longDegrees}°${longMinutes}\'${longSeconds}"$_longDirection';
-    print('Coordonnées sélectionnées: $coordinates');
-    
-    // Proposer de sauvegarder les coordonnées
-    bool? shouldSave = await _showSaveDialog();
-    if (shouldSave == true) {
-      await _saveCustomCoordinates(coordinates);
-    }
-    
-    _sendCoordinatesData(coordinates);
+  Future<bool?> _showDeleteConfirmationDialog() async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer la destination'),
+        content: const Text('Êtes-vous sûr de vouloir supprimer définitivement cette destination ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
   }
 
-  void _handleSuggestionPressed(String coordinates) {
-    setState(() {
-      _selectedSuggestion = coordinates;
-    });
-  }
+  // === SNACKBARS ===
 
-  void _handleSuggestionGoPressed() {
-    if (_selectedSuggestion != null) {
-      print('Coordonnées suggérées sélectionnées: $_selectedSuggestion');
-      _sendCoordinatesData(_selectedSuggestion!);
-    }
-  }
-
-  void _sendCoordinatesData(String coordinates) {
-    setState(() {
-      _departureTime = DateTime.now();
-      _isNavigating = true;
-      _elapsedTime = Duration.zero;
-    });
-    
-    // Démarrer le chronomètre
-    _chronoTimer?.cancel();
-    _chronoTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _elapsedTime = DateTime.now().difference(_departureTime!);
-      });
-    });
-    
+  void _showSuccessSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Navigation vers: $coordinates'),
+        content: Text(message),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
 
-  void _stopNavigation() {
-    setState(() {
-      _isNavigating = false;
-      _chronoTimer?.cancel();
-      _departureTime = null;
-      _elapsedTime = Duration.zero;
-    });
-    
+  void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Navigation arrêtée'),
-        backgroundColor: Colors.orange,
+        content: Text(message),
+        backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
 
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
-    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
-    return "${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
+  void _showWarningSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
   }
 
-  String _formatTime(DateTime time) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    return "${twoDigits(time.hour)}:${twoDigits(time.minute)}";
-  }
-
-  @override
-  void dispose() {
-    _chronoTimer?.cancel();
-    _latDegreesController.dispose();
-    _latMinutesController.dispose();
-    _latSecondsController.dispose();
-    _longDegreesController.dispose();
-    _longMinutesController.dispose();
-    _longSecondsController.dispose();
-    super.dispose();
+  void _showInfoSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.blue,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
   }
 
   @override
@@ -260,606 +356,191 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Section Navigation en cours (si active)
-            if (_isNavigating) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.green[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.green, width: 1),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.navigation,
-                              color: Colors.green,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Navigation en cours',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.green,
-                              ),
-                            ),
-                          ],
-                        ),
-                        GestureDetector(
-                          onTap: _stopNavigation,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red[50],
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.red),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.stop, size: 16, color: Colors.red),
-                                const SizedBox(width: 4),
-                                const Text(
-                                  'Arrêter',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Départ: ${_formatTime(_departureTime!)}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                        Icon(Icons.timer, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Durée: ${_formatDuration(_elapsedTime)}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[700],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
+            // Indicateur de connexion si pas connecté
+            if (!isConnected) _buildConnectionWarning(),
+            
+            // Section Navigation en cours
+            NavigationStatusWidget(
+              state: _navigationState,
+              destination: _currentDestination,
+              duration: _navigationDuration,
+              startTime: _navigationStartTime,
+              onStop: _stopNavigation,
+            ),
             
             // Section Coordonnées manuelles
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Entrer vos coordonnées',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Latitude
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 70,
-                          child: const Text(
-                            'Latitude',
-                            style: TextStyle(fontSize: 14),
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Radio<String>(
-                              value: 'N',
-                              groupValue: _latDirection,
-                              onChanged: (value) {
-                                setState(() {
-                                  _latDirection = value!;
-                                });
-                              },
-                              activeColor: Colors.green,
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            const Text('N', style: TextStyle(fontSize: 14)),
-                            const SizedBox(width: 4),
-                            Radio<String>(
-                              value: 'S',
-                              groupValue: _latDirection,
-                              onChanged: (value) {
-                                setState(() {
-                                  _latDirection = value!;
-                                });
-                              },
-                              activeColor: Colors.green,
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            const Text('S', style: TextStyle(fontSize: 14)),
-                          ],
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Expanded(
-                                flex: 2,
-                                child: TextField(
-                                  controller: _latDegreesController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: Colors.green),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 4),
-                                child: Text('°', style: TextStyle(fontSize: 14)),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: TextField(
-                                  controller: _latMinutesController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: Colors.green),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 4),
-                                child: Text('\'', style: TextStyle(fontSize: 14)),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: TextField(
-                                  controller: _latSecondsController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: Colors.green),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 4),
-                                child: Text('"', style: TextStyle(fontSize: 14)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    
-                    const SizedBox(height: 12),
-                    
-                    // Longitude
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 70,
-                          child: const Text(
-                            'Longitude',
-                            style: TextStyle(fontSize: 14),
-                          ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Radio<String>(
-                              value: 'E',
-                              groupValue: _longDirection,
-                              onChanged: (value) {
-                                setState(() {
-                                  _longDirection = value!;
-                                });
-                              },
-                              activeColor: Colors.green,
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            const Text('E', style: TextStyle(fontSize: 14)),
-                            const SizedBox(width: 4),
-                            Radio<String>(
-                              value: 'O',
-                              groupValue: _longDirection,
-                              onChanged: (value) {
-                                setState(() {
-                                  _longDirection = value!;
-                                });
-                              },
-                              activeColor: Colors.green,
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            const Text('O', style: TextStyle(fontSize: 14)),
-                          ],
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Expanded(
-                                flex: 2,
-                                child: TextField(
-                                  controller: _longDegreesController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: Colors.green),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 4),
-                                child: Text('°', style: TextStyle(fontSize: 14)),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: TextField(
-                                  controller: _longMinutesController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: Colors.green),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 4),
-                                child: Text('\'', style: TextStyle(fontSize: 14)),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: TextField(
-                                  controller: _longSecondsController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: InputDecoration(
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide(color: Colors.grey[300]!),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: const BorderSide(color: Colors.green),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 8,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 4),
-                                child: Text('"', style: TextStyle(fontSize: 14)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    
-                    const SizedBox(height: 20),
-                    
-                    // Bouton Y ALLER pour coordonnées manuelles
-                    Center(
-                      child: GestureDetector(
-                        onTap: _areAllFieldsFilled ? _handleGoButtonPressed : null,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 32,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _areAllFieldsFilled 
-                                ? Colors.green[50] 
-                                : Colors.grey[100],
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: _areAllFieldsFilled 
-                                  ? Colors.green 
-                                  : Colors.grey[300]!,
-                            ),
-                          ),
-                          child: Text(
-                            'Y ALLER',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: _areAllFieldsFilled 
-                                  ? Colors.green 
-                                  : Colors.grey[400],
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            CoordinateInputWidget(
+              onCoordinatesEntered: _handleCoordinatesEntered,
+              isNavigating: _navigationState == NavigationState.navigating,
             ),
             
             const SizedBox(height: 20),
             
-            // StreamBuilder optimisé pour éviter les freeze
-            StreamBuilder<QuerySnapshot>(
-              stream: _destinationsStream,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.red[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red, width: 1),
-                    ),
-                    child: Text(
-                      'Erreur: ${snapshot.error}',
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  );
-                }
-                
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: CircularProgressIndicator()),
-                    ),
-                  );
-                }
-                
-                final docs = snapshot.data?.docs ?? [];
-                
-                if (docs.isEmpty) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('Aucune destination disponible'),
-                    ),
-                  );
-                }
-                
-                // Séparer les destinations
-                final separatedDestinations = _separateDestinations(docs);
-                final destinationsRapides = separatedDestinations['rapides']!;
-                final historiqueDestinations = separatedDestinations['historique']!;
-                
-                return Column(
-                  children: [
-                    // Section Destinations rapides (historique: false)
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.flash_on, color: Colors.green[600], size: 20),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Destinations rapides',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            
-                            if (destinationsRapides.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Text(
-                                  'Aucune destination rapide disponible',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              )
-                            else
-                              ...destinationsRapides.map((destination) => 
-                                _buildSuggestionItem(destination, isHistoriqueSection: false)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    // Section Historique (historique: true)
-                    if (historiqueDestinations.isNotEmpty)
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(Icons.history, color: Colors.blue[600], size: 20),
-                                  const SizedBox(width: 8),
-                                  const Text(
-                                    'Historique',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              
-                              ...historiqueDestinations.map((destination) => 
-                                _buildSuggestionItem(destination, isHistoriqueSection: true)),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
+            // Section Destinations sauvegardées
+            _buildDestinationsSection(),
             
             // Bouton "Y ALLER" pour la suggestion sélectionnée
-            if (_selectedSuggestion != null) ...[
+            if (_selectedSuggestion != null && _navigationState != NavigationState.navigating) ...[
               const SizedBox(height: 16),
-              Center(
-                child: GestureDetector(
-                  onTap: _handleSuggestionGoPressed,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green),
-                    ),
-                    child: const Text(
-                      'Y ALLER',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.green,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
+              _buildGoToSelectedButton(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConnectionWarning() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange, width: 1),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning, color: Colors.orange, size: 20),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Robot non connecté. Allez dans l\'onglet WiFi pour vous connecter.',
+              style: TextStyle(fontSize: 12, color: Colors.orange),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoToSelectedButton() {
+    return Center(
+      child: GestureDetector(
+        onTap: _handleSuggestionGoPressed,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 32,
+            vertical: 12,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.green[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.green),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.navigation, size: 16, color: Colors.green),
+              const SizedBox(width: 8),
+              const Text(
+                'Y ALLER',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.green,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDestinationsSection() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _destinationsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _buildErrorContainer('Erreur: ${snapshot.error}');
+        }
+        
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingContainer();
+        }
+        
+        final docs = snapshot.data?.docs ?? [];
+        
+        if (docs.isEmpty) {
+          return _buildEmptyDestinationsContainer();
+        }
+        
+        final separatedDestinations = _separateDestinations(docs);
+        final destinationsRapides = separatedDestinations['rapides']!;
+        final historiqueDestinations = separatedDestinations['historique']!;
+        
+        return Column(
+          children: [
+            // Destinations rapides
+            _buildDestinationCategory(
+              title: 'Destinations rapides',
+              icon: Icons.flash_on,
+              color: Colors.green,
+              destinations: destinationsRapides,
+              isHistoriqueSection: false,
+            ),
+            
+            if (historiqueDestinations.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _buildDestinationCategory(
+                title: 'Historique',
+                icon: Icons.history,
+                color: Colors.blue,
+                destinations: historiqueDestinations,
+                isHistoriqueSection: true,
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDestinationCategory({
+    required String title,
+    required IconData icon,
+    required Color? color,
+    required List<Map<String, dynamic>> destinations,
+    required bool isHistoriqueSection,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            if (destinations.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Aucune destination ${isHistoriqueSection ? 'dans l\'historique' : 'rapide'} disponible',
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              )
+            else
+              ...destinations.map((destination) => 
+                _buildSuggestionItem(destination, isHistoriqueSection: isHistoriqueSection)),
           ],
         ),
       ),
@@ -869,9 +550,10 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
   Widget _buildSuggestionItem(Map<String, dynamic> suggestion, {required bool isHistoriqueSection}) {
     final isSelected = _selectedSuggestion == suggestion['coordinates'];
     final isHistorique = suggestion['historique'] ?? false;
+    final isNavigationInProgress = _navigationState == NavigationState.navigating;
     
     return GestureDetector(
-      onTap: () => _handleSuggestionPressed(suggestion['coordinates']!),
+      onTap: isNavigationInProgress ? null : () => _handleSuggestionPressed(suggestion['coordinates']!),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
@@ -926,31 +608,31 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
             ),
             
             // Actions à droite
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Bouton pour basculer vers/depuis l'historique
-                IconButton(
-                  icon: Icon(
-                    isHistoriqueSection ? Icons.flash_on : Icons.history,
-                    size: 18,
-                    color: isHistoriqueSection ? Colors.green[600] : Colors.blue[600],
-                  ),
-                  onPressed: () => _toggleHistorique(suggestion['id'], isHistorique),
-                  tooltip: isHistoriqueSection 
-                      ? 'Déplacer vers les destinations rapides' 
-                      : 'Ajouter à l\'historique',
-                ),
-                
-                // Bouton de suppression (seulement pour l'historique)
-                if (isHistoriqueSection)
+            if (!isNavigationInProgress) ...[
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                   IconButton(
-                    icon: Icon(Icons.delete, size: 18, color: Colors.red[400]),
-                    onPressed: () => _deleteDestination(suggestion['id']),
-                    tooltip: 'Supprimer cette destination',
+                    icon: Icon(
+                      isHistoriqueSection ? Icons.flash_on : Icons.history,
+                      size: 18,
+                      color: isHistoriqueSection ? Colors.green[600] : Colors.blue[600],
+                    ),
+                    onPressed: () => _toggleHistorique(suggestion['id'], isHistorique),
+                    tooltip: isHistoriqueSection 
+                        ? 'Déplacer vers les destinations rapides' 
+                        : 'Ajouter à l\'historique',
                   ),
-              ],
-            ),
+                  
+                  if (isHistoriqueSection)
+                    IconButton(
+                      icon: Icon(Icons.delete, size: 18, color: Colors.red[400]),
+                      onPressed: () => _deleteDestination(suggestion['id']),
+                      tooltip: 'Supprimer cette destination',
+                    ),
+                ],
+              ),
+            ],
             
             Icon(
               Icons.location_on,
@@ -963,77 +645,49 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
     );
   }
 
-  // Fonction pour supprimer une destination
-  Future<void> _deleteDestination(String documentId) async {
-    // Demander confirmation
-    bool? shouldDelete = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Supprimer la destination'),
-        content: const Text('Êtes-vous sûr de vouloir supprimer définitivement cette destination ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Supprimer'),
-          ),
-        ],
+  Widget _buildErrorContainer(String message) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red, width: 1),
+      ),
+      child: Text(
+        message,
+        style: const TextStyle(color: Colors.red),
       ),
     );
-    
-    if (shouldDelete != true) return;
-    
-    try {
-      await _firestore.collection('destinations').doc(documentId).delete();
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Destination supprimée'),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur lors de la suppression: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 
-  // Fonction pour basculer une destination vers/depuis l'historique
-  Future<void> _toggleHistorique(String documentId, bool currentHistorique) async {
-    try {
-      await _firestore.collection('destinations').doc(documentId).update({
-        'historique': !currentHistorique,
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(currentHistorique 
-              ? 'Destination déplacée vers les destinations rapides' 
-              : 'Destination ajoutée à l\'historique'),
-          backgroundColor: Colors.blue,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+  Widget _buildLoadingContainer() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+    );
   }
 
-  // Fonction pour séparer les destinations
+  Widget _buildEmptyDestinationsContainer() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('Aucune destination disponible'),
+      ),
+    );
+  }
+
+  // === UTILITAIRES ===
+
   Map<String, List<Map<String, dynamic>>> _separateDestinations(List<QueryDocumentSnapshot> docs) {
     final destinationsRapides = <Map<String, dynamic>>[];
     final historiqueDestinations = <Map<String, dynamic>>[];
