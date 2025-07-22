@@ -45,8 +45,12 @@ dependencies:
   wifi_scan: ^0.4.1
   location: ^5.0.3
   device_info_plus: ^9.1.0
-  firebase_core: ^2.24.2
-  cloud_firestore: ^4.13.6
+  # firebase_core: ^2.24.2
+  # cloud_firestore: ^4.13.6
+  # firebase_auth: ^4.15.3
+  firebase_core: ^2.27.0
+  cloud_firestore: ^4.17.3
+  firebase_auth: ^4.19.5
 
 
 dev_dependencies:

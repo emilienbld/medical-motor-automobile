@@ -1,16 +1,131 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ✅ AJOUTÉ
 
 class ConnexionPage extends StatelessWidget {
   const ConnexionPage({Key? key}) : super(key: key);
 
+  // ✅ AJOUTÉ : Fonction de déconnexion
+  Future<void> _signOut(BuildContext context) async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      // La navigation vers LoginPage se fera automatiquement via StreamBuilder
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de la déconnexion: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // ✅ AJOUTÉ : Dialog de confirmation
+  Future<bool?> _showLogoutConfirmation(BuildContext context) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Déconnexion'),
+        content: const Text('Êtes-vous sûr de vouloir vous déconnecter ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Se déconnecter'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // ✅ AJOUTÉ : Récupérer l'utilisateur actuel
+    final User? user = FirebaseAuth.instance.currentUser;
+    final String userEmail = user?.email ?? 'Utilisateur';
+
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ✅ AJOUTÉ : Section utilisateur connecté + déconnexion
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              margin: const EdgeInsets.only(bottom: 20), // Espacement avec le reste
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.person,
+                      color: Colors.green[600],
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Bienvenue',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        Text(
+                          userEmail,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Bouton de déconnexion
+                  IconButton(
+                    onPressed: () async {
+                      final shouldLogout = await _showLogoutConfirmation(context);
+                      if (shouldLogout == true) {
+                        await _signOut(context);
+                      }
+                    },
+                    icon: Icon(
+                      Icons.logout,
+                      color: Colors.red[400],
+                    ),
+                    tooltip: 'Se déconnecter',
+                  ),
+                ],
+              ),
+            ),
+            
+            // ✅ VOTRE CONTENU ORIGINAL INTACT À PARTIR D'ICI
+            
             // Carte de bienvenue
             Container(
               width: double.infinity,

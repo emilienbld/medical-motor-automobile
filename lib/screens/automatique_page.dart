@@ -1,6 +1,7 @@
-// automatique_page.dart - VERSION OPTIMISÉE COMPLÈTE
+// automatique_page.dart - VERSION AVEC 3 SECTIONS DISTINCTES
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 
 import '../services/wifi_connection_manager.dart';
@@ -31,8 +32,9 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
   // Instance Firestore
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  // Stream pour les destinations (créé une seule fois)
-  late Stream<QuerySnapshot> _destinationsStream;
+  // ✅ NOUVEAU : 2 streams distincts
+  late Stream<QuerySnapshot> _predefinedDestinationsStream;  // Global
+  late Stream<QuerySnapshot> _personalDestinationsStream;     // Personnel
   
   // Subscriptions
   StreamSubscription<bool>? _connectionSubscription;
@@ -50,8 +52,57 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
     // État initial
     isConnected = _connectionManager.isConnected;
     
-    // Initialiser le stream Firestore
-    _destinationsStream = _firestore
+    // ✅ NOUVEAU : Initialiser les 2 streams
+    String userId = FirebaseAuth.instance.currentUser!.uid;
+    
+    // Stream pour destinations prédéfinies (global)
+    _predefinedDestinationsStream = _firestore
+        .collection('destinations')
+        .where('type', isEqualTo: 'predefini')
+        // .orderBy('lieu')
+        .snapshots();
+    
+  Widget _buildPredefinedDestinationsSection() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _predefinedDestinationsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _buildErrorContainer('Erreur: ${snapshot.error}');
+        }
+        
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingContainer();
+        }
+        
+        final docs = snapshot.data?.docs ?? [];
+        final predefinedDestinations = docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return {
+            'coordinates': data['coordonnees'] ?? '',
+            'description': data['lieu'] ?? '',
+            'id': doc.id,
+            'type': 'predefini',
+          };
+        }).toList();
+        predefinedDestinations.sort((a, b) => 
+          (a['description'] as String).compareTo(b['description'] as String));
+        
+        return _buildDestinationCategory(
+          title: 'Destinations prédéfinies',
+          subtitle: 'Lieux médicaux disponibles pour tous',
+          icon: Icons.local_hospital,
+          color: Colors.purple,
+          destinations: predefinedDestinations,
+          isPredefined: true,
+        );
+      },
+    );
+  }
+
+    // Stream pour destinations personnelles
+    _personalDestinationsStream = _firestore
+        .collection('users')
+        .doc(userId)
         .collection('destinations')
         .orderBy('lieu')
         .snapshots();
@@ -190,10 +241,16 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
       String? description = await _showDescriptionDialog();
       
       if (description != null && description.isNotEmpty) {
-        await _firestore.collection('destinations').add({
+        // Sauvegarder dans la collection personnelle de l'utilisateur
+        String userId = FirebaseAuth.instance.currentUser!.uid;
+        await _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('destinations')
+            .add({
           'coordonnees': coordinates,
           'lieu': description,
-          'historique': true,
+          'historique': true, // Par défaut dans l'historique
         });
         
         _showSuccessSnackBar('Destination sauvegardée: $description');
@@ -209,7 +266,14 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
     if (shouldDelete != true) return;
     
     try {
-      await _firestore.collection('destinations').doc(documentId).delete();
+      // Supprimer de la collection personnelle de l'utilisateur
+      String userId = FirebaseAuth.instance.currentUser!.uid;
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('destinations')
+          .doc(documentId)
+          .delete();
       _showWarningSnackBar('Destination supprimée');
     } catch (e) {
       _showErrorSnackBar('Erreur lors de la suppression: $e');
@@ -218,7 +282,14 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
 
   Future<void> _toggleHistorique(String documentId, bool currentHistorique) async {
     try {
-      await _firestore.collection('destinations').doc(documentId).update({
+      // Modifier dans la collection personnelle de l'utilisateur
+      String userId = FirebaseAuth.instance.currentUser!.uid;
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('destinations')
+          .doc(documentId)
+          .update({
         'historique': !currentHistorique,
       });
       
@@ -376,8 +447,13 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
             
             const SizedBox(height: 20),
             
-            // Section Destinations sauvegardées
-            _buildDestinationsSection(),
+            // ✅ NOUVEAU : Section Destinations prédéfinies
+            _buildPredefinedDestinationsSection(),
+            
+            const SizedBox(height: 16),
+            
+            // ✅ NOUVEAU : Sections Destinations personnelles (rapides + historique)
+            _buildPersonalDestinationsSection(),
             
             // Bouton "Y ALLER" pour la suggestion sélectionnée
             if (_selectedSuggestion != null && _navigationState != NavigationState.navigating) ...[
@@ -449,9 +525,10 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
     );
   }
 
-  Widget _buildDestinationsSection() {
+  // ✅ NOUVEAU : Section destinations prédéfinies (global)
+  Widget _buildPredefinedDestinationsSection() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _destinationsStream,
+      stream: _predefinedDestinationsStream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return _buildErrorContainer('Erreur: ${snapshot.error}');
@@ -462,33 +539,68 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
         }
         
         final docs = snapshot.data?.docs ?? [];
+        final predefinedDestinations = docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return {
+            'coordinates': data['coordonnees'] ?? '',
+            'description': data['lieu'] ?? '',
+            'id': doc.id,
+            'type': 'predefini',
+          };
+        }).toList();
         
-        if (docs.isEmpty) {
-          return _buildEmptyDestinationsContainer();
+        return _buildDestinationCategory(
+          title: 'Destinations prédéfinies',
+          subtitle: 'Lieux médicaux disponibles pour tous',
+          icon: Icons.local_hospital,
+          color: Colors.purple,
+          destinations: predefinedDestinations,
+          isPredefined: true,
+        );
+      },
+    );
+  }
+
+  // ✅ NOUVEAU : Section destinations personnelles (rapides + historique)
+  Widget _buildPersonalDestinationsSection() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _personalDestinationsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _buildErrorContainer('Erreur: ${snapshot.error}');
         }
         
-        final separatedDestinations = _separateDestinations(docs);
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingContainer();
+        }
+        
+        final docs = snapshot.data?.docs ?? [];
+        final separatedDestinations = _separatePersonalDestinations(docs);
         final destinationsRapides = separatedDestinations['rapides']!;
         final historiqueDestinations = separatedDestinations['historique']!;
         
         return Column(
           children: [
-            // Destinations rapides
+            // Destinations rapides personnelles
             _buildDestinationCategory(
-              title: 'Destinations rapides',
+              title: 'Mes destinations rapides',
+              subtitle: 'Vos lieux favoris pour un accès rapide',
               icon: Icons.flash_on,
               color: Colors.green,
               destinations: destinationsRapides,
+              isPredefined: false,
               isHistoriqueSection: false,
             ),
             
             if (historiqueDestinations.isNotEmpty) ...[
               const SizedBox(height: 16),
               _buildDestinationCategory(
-                title: 'Historique',
+                title: 'Mon historique',
+                subtitle: 'Vos destinations sauvegardées',
                 icon: Icons.history,
                 color: Colors.blue,
                 destinations: historiqueDestinations,
+                isPredefined: false,
                 isHistoriqueSection: true,
               ),
             ],
@@ -500,10 +612,12 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
 
   Widget _buildDestinationCategory({
     required String title,
+    required String subtitle,
     required IconData icon,
     required Color? color,
     required List<Map<String, dynamic>> destinations,
-    required bool isHistoriqueSection,
+    required bool isPredefined,
+    bool isHistoriqueSection = false,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -519,11 +633,25 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
               children: [
                 Icon(icon, color: color, size: 20),
                 const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -534,20 +662,30 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
-                  'Aucune destination ${isHistoriqueSection ? 'dans l\'historique' : 'rapide'} disponible',
+                  isPredefined 
+                      ? 'Aucune destination prédéfinie disponible'
+                      : 'Aucune destination ${isHistoriqueSection ? 'dans l\'historique' : 'rapide'} disponible',
                   style: const TextStyle(color: Colors.grey),
                 ),
               )
             else
               ...destinations.map((destination) => 
-                _buildSuggestionItem(destination, isHistoriqueSection: isHistoriqueSection)),
+                _buildSuggestionItem(
+                  destination, 
+                  isPredefined: isPredefined,
+                  isHistoriqueSection: isHistoriqueSection,
+                )),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSuggestionItem(Map<String, dynamic> suggestion, {required bool isHistoriqueSection}) {
+  Widget _buildSuggestionItem(
+    Map<String, dynamic> suggestion, {
+    required bool isPredefined,
+    bool isHistoriqueSection = false,
+  }) {
     final isSelected = _selectedSuggestion == suggestion['coordinates'];
     final isHistorique = suggestion['historique'] ?? false;
     final isNavigationInProgress = _navigationState == NavigationState.navigating;
@@ -587,13 +725,36 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    suggestion['description'] ?? '',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                      color: isSelected ? Colors.green[700] : Colors.black87,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          suggestion['description'] ?? '',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                            color: isSelected ? Colors.green[700] : Colors.black87,
+                          ),
+                        ),
+                      ),
+                      // Badge pour les destinations prédéfinies
+                      if (isPredefined)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.purple[100],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Global',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.purple[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -607,8 +768,8 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
               ),
             ),
             
-            // Actions à droite
-            if (!isNavigationInProgress) ...[
+            // ✅ Actions selon le type
+            if (!isNavigationInProgress && !isPredefined) ...[
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -673,22 +834,8 @@ class _AutomatiquePageState extends State<AutomatiquePage> {
     );
   }
 
-  Widget _buildEmptyDestinationsContainer() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('Aucune destination disponible'),
-      ),
-    );
-  }
-
-  // === UTILITAIRES ===
-
-  Map<String, List<Map<String, dynamic>>> _separateDestinations(List<QueryDocumentSnapshot> docs) {
+  // ✅ NOUVEAU : Séparer les destinations personnelles
+  Map<String, List<Map<String, dynamic>>> _separatePersonalDestinations(List<QueryDocumentSnapshot> docs) {
     final destinationsRapides = <Map<String, dynamic>>[];
     final historiqueDestinations = <Map<String, dynamic>>[];
     

@@ -1,14 +1,15 @@
+// main.dart - AVEC AUTHENTIFICATION
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart'; // Sera généré par flutterfire configure
+import 'package:firebase_auth/firebase_auth.dart'; // ✅ AJOUTÉ
+import 'firebase_options.dart';
 import 'navigation/main_navigation.dart';
+import 'screens/login_page.dart'; // ✅ AJOUTÉ
 import 'services/wifi_connection_manager.dart';
 
 void main() async {
-  // ✅ Ajout obligatoire
   WidgetsFlutterBinding.ensureInitialized();
   
-  // ✅ Initialiser Firebase AVANT de lancer l'app
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -41,7 +42,6 @@ class _ZiggyCarAppState extends State<ZiggyCarApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Gérer la pause/reprise de l'app pour optimiser la batterie
     if (state == AppLifecycleState.paused) {
       _connectionManager.stopHeartbeat();
     } else if (state == AppLifecycleState.resumed) {
@@ -59,8 +59,85 @@ class _ZiggyCarAppState extends State<ZiggyCarApp> with WidgetsBindingObserver {
         primarySwatch: Colors.blue,
         fontFamily: 'SF Pro',
       ),
-      home: const MainNavigationPage(),
+      
+      // ✅ GESTION DE L'AUTHENTIFICATION
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          // Attendre la vérification de l'état d'authentification
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const _LoadingPage();
+          }
+          
+          // Si utilisateur connecté → Application principale
+          if (snapshot.hasData) {
+            return const MainNavigationPage();
+          }
+          
+          // Si pas connecté → Page de connexion
+          return const LoginPage();
+        },
+      ),
+      
       debugShowCheckedModeBanner: false,
+    );
+  }
+}
+
+// ✅ Page de chargement pendant vérification auth
+class _LoadingPage extends StatelessWidget {
+  const _LoadingPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(
+                Icons.medical_services,
+                size: 60,
+                color: Colors.green[600],
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            Text(
+              'ZIGGY CAR',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.green[600],
+              ),
+            ),
+            
+            const SizedBox(height: 32),
+            
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            Text(
+              'Chargement...',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
