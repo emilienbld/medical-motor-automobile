@@ -65,7 +65,7 @@ class CameraService {
   void loadCameraStream() {
     if (!isConnected) return;
     
-    String cameraUrl = "http://192.168.4.4";
+    String cameraUrl = "http://192.168.4.5";
     _controller.loadRequest(Uri.parse(cameraUrl));
   }
   
